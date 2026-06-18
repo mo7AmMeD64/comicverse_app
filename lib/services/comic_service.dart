@@ -3,14 +3,20 @@ import 'package:http/http.dart' as http;
 import '../models/comic_post.dart';
 
 /// خدمة جلب البيانات من Comicverse (مدوّن Blogger) عبر Posts JSON Feed API الرسمي:
-///   /feeds/posts/default?alt=json
-///   /feeds/posts/summary/-/{label}?alt=json
+///   /feeds/posts/default/-/{label}?alt=json   → محتوى كامل (يحوي صور القراءة)
+///   /feeds/posts/summary/-/{label}?alt=json   → ملخص فقط (content.$t فارغ تمامًا!)
 ///
-/// ملاحظة مهمة: الأعداد التابعة لكل عمل لا ترتبط بعنوان العمل نفسه كوسم
-/// (label)، بل بقيمة منفصلة data-label مخزَّنة يدويًا داخل HTML صفحة
-/// العمل (مثال: عمل "Moon Knight (2021)" يحمل data-label="MoonKnight").
-/// لذلك نحتاج لجلب HTML الخام لصفحة العمل أولًا (fetchSeriesDataLabel)
-/// قبل التمكن من جلب أعداده بشكل صحيح عبر fetchByLabel.
+/// ملاحظتان مهمتان اكتُشِفتا بالتجربة الفعلية على هذا الموقع:
+///
+/// 1) الأعداد التابعة لكل عمل لا ترتبط بعنوان العمل نفسه كوسم (label)،
+///    بل بقيمة منفصلة data-label مخزَّنة يدويًا داخل HTML صفحة العمل
+///    (مثال: عمل "Moon Knight (2021)" يحمل data-label="MoonKnight").
+///    لذلك نحتاج لجلب HTML الخام لصفحة العمل أولًا (fetchSeriesDataLabel)
+///    قبل التمكن من جلب أعداده بشكل صحيح عبر fetchByLabel/fetchByLabelSummary.
+///
+/// 2) endpoint "summary" يُرجع content.$t فارغًا تمامًا (0 حرف) — لا يحوي
+///    أي صور قراءة على الإطلاق، فقط عنوان وصورة مصغّرة. لجلب صور القراءة
+///    الفعلية يجب استخدام endpoint "default" الذي يُرجع المحتوى الكامل.
 class ComicService {
   static const String baseUrl = 'https://arcomixverse.blogspot.com';
 
@@ -66,10 +72,24 @@ class ComicService {
         .toList();
   }
 
-  /// يجلب كل منشورات تصنيف معيّن (عمل واحد، أو ناشر، أو أي وسم).
-  /// عند جلب تصنيف اسم عمل معيّن، ستُعاد كل أعداد ذلك العمل + منشور العمل نفسه
-  /// لأنهم يتشاركون نفس الوسم في هذا الموقع.
+  /// يجلب كل منشورات تصنيف معيّن (عمل واحد، أو ناشر، أو أي وسم) مع المحتوى
+  /// الكامل (content.$t). يستخدم "default" وليس "summary" لأن "summary"
+  /// يُرجع content.$t فارغًا تمامًا (0 حرف) — لا يحوي صور القراءة على
+  /// الإطلاق. استخدم هذه الدالة فقط عندما تحتاج صور القراءة الفعلية
+  /// (قارئ العدد)، لأنها أثقل بكثير من fetchByLabelSummary.
   Future<List<ComicPost>> fetchByLabel(String label,
+      {int maxResults = 100}) async {
+    final uri = Uri.parse(
+        '$baseUrl/feeds/posts/default/-/${Uri.encodeComponent(label)}'
+        '?alt=json&max-results=$maxResults');
+    final data = await _fetchJson(uri);
+    return _parseEntries(data);
+  }
+
+  /// نسخة خفيفة من fetchByLabel تستخدم "summary" (عنوان + صورة مصغّرة فقط
+  /// بدون محتوى كامل). تُستخدم لعرض قوائم الأعداد/الأعمال في الواجهة حيث
+  /// لا حاجة لصور القراءة الكاملة، لتقليل استهلاك البيانات والوقت.
+  Future<List<ComicPost>> fetchByLabelSummary(String label,
       {int maxResults = 100}) async {
     final uri = Uri.parse(
         '$baseUrl/feeds/posts/summary/-/${Uri.encodeComponent(label)}'
@@ -122,6 +142,23 @@ class ComicService {
       return anyMatch.group(1) ?? anyMatch.group(2);
     }
     return null;
+  }
+
+  /// يجلب منشور عدد واحد بعنوانه الدقيق ضمن تصنيف عمل معيّن، مع محتواه
+  /// الكامل (لاستخراج صور القراءة). بدل تحميل كل أعداد العمل (قد تكون
+  /// مئات الآلاف من الأحرف لعمل طويل) لمجرد عرض عدد واحد، نضيّق النتيجة
+  /// بدمج تصنيف العمل مع نص عنوان العدد عبر معامل البحث q المدمج في Blogger.
+  Future<ComicPost?> fetchSingleIssueByTitle(
+      String seriesLabel, String issueTitle) async {
+    final uri = Uri.parse('$baseUrl/feeds/posts/default/-/'
+        '${Uri.encodeComponent(seriesLabel)}'
+        '?alt=json&max-results=5&q=${Uri.encodeComponent(issueTitle)}');
+    final data = await _fetchJson(uri);
+    final entries = _parseEntries(data);
+    for (final p in entries) {
+      if (p.title == issueTitle) return p;
+    }
+    return entries.isNotEmpty ? entries.first : null;
   }
 
   /// يجلب كل المنشورات في الموقع (تستخدم لشاشة "كل الأعمال" والبحث)

@@ -22,6 +22,7 @@ class _ComicDetailScreenState extends State<ComicDetailScreen> {
   final FavoritesService _favService = FavoritesService();
 
   List<ComicPost> _issues = [];
+  String? _resolvedSeriesLabel;
   bool _loading = true;
   bool _isFavorite = false;
   String? _error;
@@ -56,18 +57,22 @@ class _ComicDetailScreenState extends State<ComicDetailScreen> {
         realLabel = null;
       }
       final seriesLabel = realLabel ?? widget.seriesPost.title;
+      _resolvedSeriesLabel = seriesLabel;
       final posts =
-          await _service.fetchByLabel(seriesLabel, maxResults: 500);
+          await _service.fetchByLabelSummary(seriesLabel, maxResults: 500);
       final split = ComicService.splitSeriesAndIssues(posts);
       var issues = split.issues;
 
       // إن لم نجد أعدادًا بالوسم المستخرج رغم نجاح الاستخراج، نجرّب العنوان
       // كخطة بديلة أخيرة (تحوطًا لاختلافات نادرة بين الوسمين).
       if (issues.isEmpty && realLabel != null && realLabel != widget.seriesPost.title) {
-        final fallbackPosts = await _service.fetchByLabel(
+        final fallbackPosts = await _service.fetchByLabelSummary(
             widget.seriesPost.title, maxResults: 500);
         final fallbackSplit = ComicService.splitSeriesAndIssues(fallbackPosts);
-        issues = fallbackSplit.issues;
+        if (fallbackSplit.issues.isNotEmpty) {
+          issues = fallbackSplit.issues;
+          _resolvedSeriesLabel = widget.seriesPost.title;
+        }
       }
 
       setState(() => _issues = issues);
@@ -92,6 +97,7 @@ class _ComicDetailScreenState extends State<ComicDetailScreen> {
           allIssues: _issues,
           currentIndex: index,
           seriesPost: widget.seriesPost,
+          seriesLabel: _resolvedSeriesLabel ?? widget.seriesPost.title,
         ),
       ),
     );

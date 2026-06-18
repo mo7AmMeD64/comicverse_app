@@ -13,6 +13,7 @@ class IssueReaderScreen extends StatefulWidget {
   final List<ComicPost> allIssues;
   final int currentIndex;
   final ComicPost seriesPost;
+  final String seriesLabel;
 
   const IssueReaderScreen({
     super.key,
@@ -20,6 +21,7 @@ class IssueReaderScreen extends StatefulWidget {
     required this.allIssues,
     required this.currentIndex,
     required this.seriesPost,
+    required this.seriesLabel,
   });
 
   @override
@@ -55,18 +57,12 @@ class _IssueReaderScreenState extends State<IssueReaderScreen> {
       _images = [];
     });
     try {
-      // المحتوى الكامل (content.\$t) موجود أصلاً في المنشور الذي وصلنا منه،
-      // لكن نعيد الجلب للتأكد من توافر أحدث نسخة من المحتوى والصور الكاملة.
-      final results = await _service.fetchByLabel(_currentIssue.title,
-          maxResults: 5);
-      ComicPost? full;
-      for (final p in results) {
-        if (p.id == _currentIssue.id || p.title == _currentIssue.title) {
-          full = p;
-          break;
-        }
-      }
-      full ??= _currentIssue;
+      // نجلب العدد المطلوب بعنوانه الدقيق فقط (مع تضييق البحث ضمن تصنيف
+      // العمل)، بدل تحميل كل أعداد العمل بمحتواها الكامل دفعة واحدة - وهذا
+      // قد يكون ثقيلًا جدًا لأعمال طويلة (مئات آلاف الأحرف لمجرد عدد واحد).
+      final full = await _service.fetchSingleIssueByTitle(
+              widget.seriesLabel, _currentIssue.title) ??
+          _currentIssue;
       final imgs = full.extractAllImages();
       setState(() => _images = imgs);
 
