@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// ثيم موحّد للتطبيق مستوحى من ألوان الموقع الأصلي (أحمر/أسود) مع دعم RTL كامل.
 class AppTheme {
@@ -11,11 +12,18 @@ class AppTheme {
   static const Color textMuted = Color(0xFFA5ADBB);
 
   static ThemeData get darkTheme {
-    return ThemeData(
+    final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: background,
-      fontFamily: 'Cairo',
+    );
+    final textTheme = GoogleFonts.cairoTextTheme(base.textTheme).apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    );
+    return base.copyWith(
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryRed,
         brightness: Brightness.dark,
@@ -59,10 +67,6 @@ class AppTheme {
         labelStyle: const TextStyle(color: textPrimary, fontSize: 12),
         side: BorderSide(color: primaryRed.withOpacity(0.4)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      textTheme: const TextTheme(
-        bodyMedium: TextStyle(color: textPrimary),
-        bodyLarge: TextStyle(color: textPrimary),
       ),
     );
   }

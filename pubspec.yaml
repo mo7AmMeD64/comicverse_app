@@ -15,6 +15,7 @@ dependencies:
   shared_preferences: ^2.2.3
   html_unescape: ^2.0.0
   shimmer: ^3.0.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

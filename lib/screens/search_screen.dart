@@ -19,50 +19,47 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
   Timer? _debounce;
 
-  List<ComicPost> _allSeries = [];
   List<ComicPost> _results = [];
-  bool _loadingAll = true;
+  bool _loading = false;
+  bool _searched = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadAllForSearch();
+  /// نستخدم بحث Blogger الرسمي على الخادم (معامل q) بدلاً من تحميل كل
+  /// منشورات الموقع محليًا وفلترتها؛ الموقع قد يحوي آلاف المنشورات (كل
+  /// عدد منشور مستقل)، فتحميلها دفعة واحدة لن يغطي كل الأعمال أبدًا.
+  void _onQueryChanged(String query) {
+    _debounce?.cancel();
+    final q = query.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _results = [];
+        _searched = false;
+        _error = null;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 450), () => _runSearch(q));
   }
 
-  /// نجلب كل المنشورات مرة واحدة، ثم نفلتر محليًا حسب العنوان عند كل بحث.
-  /// هذا أسرع وأخف من إرسال طلب جديد لكل حرف يكتبه المستخدم.
-  Future<void> _loadAllForSearch() async {
+  Future<void> _runSearch(String query) async {
     setState(() {
-      _loadingAll = true;
+      _loading = true;
+      _searched = true;
       _error = null;
     });
     try {
-      final posts = await _service.fetchAllPosts(maxResults: 150);
+      final posts = await _service.searchPosts(query, maxResults: 60);
+      // نريد فقط منشورات الأعمال (Series) في نتائج البحث، لا الأعداد الفردية
       final seriesOnly =
           posts.where((p) => !ComicService.isIssuePost(p)).toList();
-      setState(() => _allSeries = seriesOnly);
+      if (!mounted) return;
+      setState(() => _results = seriesOnly);
     } catch (e) {
-      setState(() => _error = 'تعذر تحميل قائمة الأعمال للبحث');
+      if (!mounted) return;
+      setState(() => _error = 'تعذر إجراء البحث، تحقق من الاتصال');
     } finally {
-      if (mounted) setState(() => _loadingAll = false);
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _onQueryChanged(String query) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      final q = query.trim().toLowerCase();
-      if (q.isEmpty) {
-        setState(() => _results = []);
-        return;
-      }
-      setState(() {
-        _results = _allSeries
-            .where((p) => p.title.toLowerCase().contains(q))
-            .toList();
-      });
-    });
   }
 
   @override
@@ -74,6 +71,10 @@ class _SearchScreenState extends State<SearchScreen> {
           autofocus: true,
           textInputAction: TextInputAction.search,
           onChanged: _onQueryChanged,
+          onSubmitted: (v) {
+            final q = v.trim();
+            if (q.isNotEmpty) _runSearch(q);
+          },
           decoration: const InputDecoration(
             hintText: 'ابحث عن اسم العمل...',
             border: InputBorder.none,
@@ -94,14 +95,15 @@ class _SearchScreenState extends State<SearchScreen> {
             Text(_error!),
             const SizedBox(height: 12),
             ElevatedButton(
-                onPressed: _loadAllForSearch,
-                child: const Text('إعادة المحاولة')),
+              onPressed: () => _runSearch(_controller.text.trim()),
+              child: const Text('إعادة المحاولة'),
+            ),
           ],
         ),
       );
     }
 
-    if (_loadingAll) {
+    if (_loading) {
       return GridView.builder(
         padding: const EdgeInsets.all(14),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -115,7 +117,7 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    if (_controller.text.trim().isEmpty) {
+    if (!_searched) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),

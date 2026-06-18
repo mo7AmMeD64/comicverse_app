@@ -45,10 +45,12 @@ class _ComicDetailScreenState extends State<ComicDetailScreen> {
       _error = null;
     });
     try {
-      // اسم العمل نفسه هو الوسم (label) الذي يربط كل الأعداد به في هذا الموقع
+      // اسم العمل نفسه هو الوسم (label) الذي يربط كل الأعداد به في هذا الموقع.
+      // نستخدم أعلى حد مسموح به من Blogger (500) لضمان جلب كل الأعداد
+      // حتى للأعمال الطويلة جدًا (مثل أعمال تتجاوز 100 عدد).
       final seriesLabel = widget.seriesPost.title;
       final posts =
-          await _service.fetchByLabel(seriesLabel, maxResults: 200);
+          await _service.fetchByLabel(seriesLabel, maxResults: 500);
       final split = ComicService.splitSeriesAndIssues(posts);
       setState(() => _issues = split.issues);
     } catch (e) {

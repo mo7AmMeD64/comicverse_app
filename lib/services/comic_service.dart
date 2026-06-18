@@ -74,6 +74,15 @@ class ComicService {
     return _parseEntries(data);
   }
 
+  /// يبحث في كل محتوى الموقع (العناوين والنصوص) عبر معامل البحث q
+  /// المدمج في Blogger، والذي يعمل على الخادم بلا حاجة لتحميل كل المنشورات.
+  Future<List<ComicPost>> searchPosts(String query, {int maxResults = 40}) async {
+    final uri = Uri.parse('$baseUrl/feeds/posts/default'
+        '?alt=json&max-results=$maxResults&q=${Uri.encodeComponent(query)}');
+    final data = await _fetchJson(uri);
+    return _parseEntries(data);
+  }
+
   /// يجلب كل المنشورات في الموقع (تستخدم لشاشة "كل الأعمال" والبحث)
   Future<List<ComicPost>> fetchAllPosts({int maxResults = 150}) async {
     final uri = Uri.parse(

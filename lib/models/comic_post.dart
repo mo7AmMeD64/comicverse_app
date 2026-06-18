@@ -54,10 +54,13 @@ class ComicPost {
         .toString();
 
     if (thumb == null) {
-      final match = RegExp(r'''<img[^>]+src=["']([^"']+)["']''')
-          .firstMatch(contentHtml);
-      if (match != null) {
-        thumb = _upgradeImageUrl(match.group(1)!);
+      final imgTagMatch = RegExp(r'<img[^>]*>').firstMatch(contentHtml);
+      if (imgTagMatch != null) {
+        final tag = imgTagMatch.group(0)!;
+        final src = _extractAttr(tag, 'data-src') ?? _extractAttr(tag, 'src');
+        if (src != null && src.isNotEmpty && !src.startsWith('data:')) {
+          thumb = _upgradeImageUrl(src);
+        }
       }
     }
 
@@ -108,19 +111,28 @@ class ComicPost {
         .replaceAll(RegExp(r'=s\d+(-c)?'), '=s1600');
   }
 
-  /// يستخرج كل روابط الصور من محتوى HTML بترتيبها (تستخدم لصفحات قراءة العدد)
+  /// يستخرج كل روابط الصور من محتوى HTML بترتيبها (تستخدم لصفحات قراءة العدد).
+  /// الموقع يستخدم نظام Lazy-load حيث يخزَّن الرابط الحقيقي للصورة في
+  /// data-src وليس src مباشرة (يُملأ src فقط عند ظهور الصورة على الشاشة
+  /// في المتصفح)، لذلك نتحقق من data-src أولاً قبل src كحل بديل.
   List<String> extractAllImages() {
-    final matches =
-        RegExp(r'''<img[^>]+src=["']([^"']+)["']''').allMatches(contentHtml);
+    final imgTagMatches = RegExp(r'<img[^>]*>').allMatches(contentHtml);
     final urls = <String>[];
-    for (final m in matches) {
-      final src = m.group(1);
-      if (src == null) continue;
-      // تجاهل أيقونات السوشيال ميديا الصغيرة المعروفة
+    for (final tagMatch in imgTagMatches) {
+      final tag = tagMatch.group(0)!;
+      String? src = _extractAttr(tag, 'data-src') ?? _extractAttr(tag, 'src');
+      if (src == null || src.isEmpty) continue;
+      if (src.startsWith('data:')) continue;
       if (src.contains('no-image') || src.contains('placeholder')) continue;
       urls.add(fullResImage(src));
     }
     return urls;
+  }
+
+  static String? _extractAttr(String tag, String attr) {
+    final match =
+        RegExp('$attr=["\']([^"\']+)["\']').firstMatch(tag);
+    return match?.group(1);
   }
 
   /// نص الوصف نظيفًا بدون أي وسوم HTML (للعرض في صفحة التفاصيل)
