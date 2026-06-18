@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/comic_post.dart';
 
-/// خدمة جلب البيانات من Comicverse (مدوّن Blogger) عبر Posts JSON Feed API الرسمي.
-///
-/// لا حاجة لتحليل HTML؛ Blogger يوفر واجهة JSON عامة وموثوقة:
+/// خدمة جلب البيانات من Comicverse (مدوّن Blogger) عبر Posts JSON Feed API الرسمي:
 ///   /feeds/posts/default?alt=json
 ///   /feeds/posts/summary/-/{label}?alt=json
+///
+/// ملاحظة مهمة: الأعداد التابعة لكل عمل لا ترتبط بعنوان العمل نفسه كوسم
+/// (label)، بل بقيمة منفصلة data-label مخزَّنة يدويًا داخل HTML صفحة
+/// العمل (مثال: عمل "Moon Knight (2021)" يحمل data-label="MoonKnight").
+/// لذلك نحتاج لجلب HTML الخام لصفحة العمل أولًا (fetchSeriesDataLabel)
+/// قبل التمكن من جلب أعداده بشكل صحيح عبر fetchByLabel.
 class ComicService {
   static const String baseUrl = 'https://arcomixverse.blogspot.com';
 
@@ -81,6 +85,43 @@ class ComicService {
         '?alt=json&max-results=$maxResults&q=${Uri.encodeComponent(query)}');
     final data = await _fetchJson(uri);
     return _parseEntries(data);
+  }
+
+  /// يجلب صفحة العمل HTML الخام ويستخرج منها الوسم (label) الحقيقي
+  /// المستخدم لربط الأعداد بهذا العمل. هذا الموقع لا يربط الأعداد بعنوان
+  /// العمل نفسه، بل بقيمة منفصلة مخزَّنة يدويًا في خاصية data-label على
+  /// عنصر HTML باسم <div class="manga-widget" data-label="..."></div>
+  /// والتي قد تختلف كليًا عن العنوان المعروض (مثل "MoonKnight" بدل
+  /// "Moon Knight (2021)"). نحاكي هنا تمامًا ما يفعله جافاسكريبت الموقع.
+  Future<String?> fetchSeriesDataLabel(String seriesPageUrl) async {
+    final response = await _client.get(Uri.parse(seriesPageUrl));
+    if (response.statusCode != 200) {
+      throw ComicServiceException('فشل تحميل صفحة العمل (كود ${response.statusCode})');
+    }
+    final body = response.body;
+
+    // نبحث أولًا عن أي عنصر يحوي class="manga-widget" ضمن حدود معقولة
+    // من النص، ثم نستخرج data-label من نفس العنصر بغض النظر عن ترتيب
+    // الخصائص بداخله (قد تأتي قبل أو بعد class، بفواصل أو بدونها).
+    final widgetMatch =
+        RegExp(r'''<div[^>]*class=["']manga-widget["'][^>]*>''')
+            .firstMatch(body);
+    if (widgetMatch != null) {
+      final tag = widgetMatch.group(0)!;
+      final labelMatch =
+          RegExp(r'''data-label=["']([^"']+)["']''').firstMatch(tag);
+      if (labelMatch != null) return labelMatch.group(1);
+    }
+
+    // خطة بديلة: البحث عن data-label في أي عنصر div قريب من "manga-widget"
+    // (تحوطًا لو اختلف ترتيب الخصائص عن النمط أعلاه بشكل غير متوقع).
+    final anyMatch = RegExp(
+            r'''manga-widget["'\s][^>]*?data-label=["']([^"']+)["']|data-label=["']([^"']+)["'][^>]*?manga-widget''')
+        .firstMatch(body);
+    if (anyMatch != null) {
+      return anyMatch.group(1) ?? anyMatch.group(2);
+    }
+    return null;
   }
 
   /// يجلب كل المنشورات في الموقع (تستخدم لشاشة "كل الأعمال" والبحث)

@@ -7,8 +7,8 @@ import '../theme.dart';
 import 'issue_reader_screen.dart';
 
 /// شاشة تفاصيل عمل (Series): الغلاف، الوصف، التصنيفات، وقائمة الأعداد.
-/// تجلب أعداد العمل عبر نفس وسم (label) اسم العمل، لأن هذا الموقع
-/// يربط بين منشور العمل وكل أعداده بمشاركتهم نفس التصنيف.
+/// الأعداد لا ترتبط بعنوان العمل، بل بقيمة data-label منفصلة مخزَّنة
+/// داخل صفحة العمل نفسها كخاصية HTML (راجع fetchSeriesDataLabel).
 class ComicDetailScreen extends StatefulWidget {
   final ComicPost seriesPost;
   const ComicDetailScreen({super.key, required this.seriesPost});
@@ -45,14 +45,32 @@ class _ComicDetailScreenState extends State<ComicDetailScreen> {
       _error = null;
     });
     try {
-      // اسم العمل نفسه هو الوسم (label) الذي يربط كل الأعداد به في هذا الموقع.
-      // نستخدم أعلى حد مسموح به من Blogger (500) لضمان جلب كل الأعداد
-      // حتى للأعمال الطويلة جدًا (مثل أعمال تتجاوز 100 عدد).
-      final seriesLabel = widget.seriesPost.title;
+      // الموقع لا يربط الأعداد بعنوان العمل، بل بقيمة data-label منفصلة
+      // مخزَّنة داخل صفحة العمل نفسها (مثال: "MoonKnight" بدل "Moon Knight
+      // (2021)"). نستخرجها أولًا من HTML الصفحة، ثم نستخدمها لجلب الأعداد.
+      // إن فشل الاستخراج لأي سبب، نجرّب العنوان نفسه كخطة بديلة احتياطية.
+      String? realLabel;
+      try {
+        realLabel = await _service.fetchSeriesDataLabel(widget.seriesPost.link);
+      } catch (_) {
+        realLabel = null;
+      }
+      final seriesLabel = realLabel ?? widget.seriesPost.title;
       final posts =
           await _service.fetchByLabel(seriesLabel, maxResults: 500);
       final split = ComicService.splitSeriesAndIssues(posts);
-      setState(() => _issues = split.issues);
+      var issues = split.issues;
+
+      // إن لم نجد أعدادًا بالوسم المستخرج رغم نجاح الاستخراج، نجرّب العنوان
+      // كخطة بديلة أخيرة (تحوطًا لاختلافات نادرة بين الوسمين).
+      if (issues.isEmpty && realLabel != null && realLabel != widget.seriesPost.title) {
+        final fallbackPosts = await _service.fetchByLabel(
+            widget.seriesPost.title, maxResults: 500);
+        final fallbackSplit = ComicService.splitSeriesAndIssues(fallbackPosts);
+        issues = fallbackSplit.issues;
+      }
+
+      setState(() => _issues = issues);
     } catch (e) {
       setState(() => _error = 'تعذر تحميل قائمة الأعداد');
     } finally {
