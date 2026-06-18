@@ -1,0 +1,64 @@
+name: Build APK & Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      # المشروع مرفوع بدون مجلد android/ (يُولّد هنا فقط).
+      # نحفظ نسخة احتياطية من ملفاتنا الأصلية لضمان عدم استبدالها
+      # بأي حال، بغض النظر عن سلوك "flutter create" الافتراضي.
+      - name: Backup project files
+        run: |
+          mkdir -p /tmp/backup
+          cp -r lib /tmp/backup/lib
+          cp pubspec.yaml /tmp/backup/pubspec.yaml
+
+      - name: Generate Android project files
+        run: flutter create . --platforms=android --org com.mo7ammed64 --project-name comicverse_app
+
+      - name: Restore project files
+        run: |
+          rm -rf lib
+          cp -r /tmp/backup/lib lib
+          cp /tmp/backup/pubspec.yaml pubspec.yaml
+
+      - name: Add internet permission to AndroidManifest
+        run: |
+          sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />#' android/app/src/main/AndroidManifest.xml
+          cat android/app/src/main/AndroidManifest.xml
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK (release)
+        run: flutter build apk --release
+
+      - name: Set release tag
+        id: tag
+        run: echo "tag=v1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk comicverse-${{ steps.tag.outputs.tag }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Comicverse ${{ steps.tag.outputs.tag }}
+          body: بناء تلقائي من GitHub Actions - الكوميت ${{ github.sha }}
+          files: comicverse-${{ steps.tag.outputs.tag }}.apk
