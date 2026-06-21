@@ -95,9 +95,11 @@ class _IssueReaderScreenState extends State<IssueReaderScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          GestureDetector(
-            onTap: () => setState(() => _showControls = !_showControls),
-            child: _buildReaderBody(),
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => _showControls = !_showControls),
+              child: _buildReaderBody(),
+            ),
           ),
           AnimatedOpacity(
             opacity: _showControls ? 1 : 0,
