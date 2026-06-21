@@ -6,7 +6,6 @@ import '../widgets/comic_section_row.dart';
 import 'comic_detail_screen.dart';
 import 'search_screen.dart';
 import 'category_screen.dart';
-import 'favorites_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -65,14 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Comicverse'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.favorite_border),
-            tooltip: 'المفضلة',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const FavoritesScreen()),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'بحث',
