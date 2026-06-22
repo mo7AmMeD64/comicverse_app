@@ -148,17 +148,24 @@ class ComicService {
   /// الكامل (لاستخراج صور القراءة). بدل تحميل كل أعداد العمل (قد تكون
   /// مئات الآلاف من الأحرف لعمل طويل) لمجرد عرض عدد واحد، نضيّق النتيجة
   /// بدمج تصنيف العمل مع نص عنوان العدد عبر معامل البحث q المدمج في Blogger.
+  ///
+  /// ملاحظة أمان مهمة: معامل q= يبحث في كل نص المحتوى وليس فقط العنوان،
+  /// وعناوين كثيرة شائعة جدًا (مثل "العدد#1") قد تتكرر بين أعمال مختلفة.
+  /// لذلك يجب التحقق من تطابق العنوان *حرفيًا* قبل قبول أي نتيجة؛ إرجاع
+  /// أول نتيجة دون تحقق قد يعرض صور عدد من عمل مختلف تمامًا للمستخدم.
   Future<ComicPost?> fetchSingleIssueByTitle(
       String seriesLabel, String issueTitle) async {
     final uri = Uri.parse('$baseUrl/feeds/posts/default/-/'
         '${Uri.encodeComponent(seriesLabel)}'
-        '?alt=json&max-results=5&q=${Uri.encodeComponent(issueTitle)}');
+        '?alt=json&max-results=10&q=${Uri.encodeComponent(issueTitle)}');
     final data = await _fetchJson(uri);
     final entries = _parseEntries(data);
     for (final p in entries) {
       if (p.title == issueTitle) return p;
     }
-    return entries.isNotEmpty ? entries.first : null;
+    // لا fallback لأي نتيجة أخرى هنا عمدًا: نتيجة من عمل/عدد مختلف أسوأ
+    // بكثير من عدم العثور على شيء (يظهر خطأ واضح بدل محتوى خاطئ مضلِّل).
+    return null;
   }
 
   /// يجلب كل المنشورات في الموقع (تستخدم لشاشة "كل الأعمال" والبحث)

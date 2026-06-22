@@ -75,9 +75,24 @@ class _IssueReaderScreenState extends State<IssueReaderScreen> {
     try {
       // نجلب العدد المطلوب بعنوانه الدقيق فقط (مع تضييق البحث ضمن تصنيف
       // العمل عبر seriesLabel)، بدل تحميل كل أعداد العمل دفعة واحدة.
-      final full = await _service.fetchSingleIssueByTitle(
-              widget.seriesLabel, _currentIssue.title) ??
-          _currentIssue;
+      var full = await _service.fetchSingleIssueByTitle(
+          widget.seriesLabel, _currentIssue.title);
+
+      // إن فشلت المطابقة الدقيقة عبر البحث المضيّق (نادر، قد يحدث مع
+      // عناوين تحوي رموزًا خاصة)، نقع على خطة بديلة أبطأ لكنها أكيدة:
+      // جلب كل أعداد العمل بمحتواها الكامل والبحث فيها عن التطابق الدقيق.
+      // هذا أفضل من عرض عدد خاطئ من عمل مختلف تمامًا للمستخدم.
+      if (full == null) {
+        final allFull =
+            await _service.fetchByLabel(widget.seriesLabel, maxResults: 500);
+        for (final p in allFull) {
+          if (p.title == _currentIssue.title) {
+            full = p;
+            break;
+          }
+        }
+      }
+      full ??= _currentIssue;
       final imgs = full.extractAllImages();
       if (!mounted) return;
       setState(() => _images = imgs);
