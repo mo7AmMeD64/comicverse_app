@@ -145,14 +145,12 @@ class ComicService {
   }
 
   /// يجلب منشور عدد واحد بعنوانه الدقيق ضمن تصنيف عمل معيّن، مع محتواه
-  /// الكامل (لاستخراج صور القراءة). بدل تحميل كل أعداد العمل (قد تكون
-  /// مئات الآلاف من الأحرف لعمل طويل) لمجرد عرض عدد واحد، نضيّق النتيجة
-  /// بدمج تصنيف العمل مع نص عنوان العدد عبر معامل البحث q المدمج في Blogger.
+  /// الكامل (لاستخراج صور القراءة).
   ///
-  /// ملاحظة أمان مهمة: معامل q= يبحث في كل نص المحتوى وليس فقط العنوان،
-  /// وعناوين كثيرة شائعة جدًا (مثل "العدد#1") قد تتكرر بين أعمال مختلفة.
-  /// لذلك يجب التحقق من تطابق العنوان *حرفيًا* قبل قبول أي نتيجة؛ إرجاع
-  /// أول نتيجة دون تحقق قد يعرض صور عدد من عمل مختلف تمامًا للمستخدم.
+  /// مشكلة مكتشفة: بحث q= في Blogger لا يُقيّد النتائج بالتصنيف المحدد في
+  /// المسار (-/{label}) بشكل صارم — قد يُرجع منشورات من أعمال أخرى تحوي
+  /// نفس عنوان العدد (مثال: "العدد#1" شائع جداً عبر عشرات الأعمال). لذلك
+  /// يجب التحقق من أن المنشور يحمل تصنيف العمل المطلوب فعليًا.
   Future<ComicPost?> fetchSingleIssueByTitle(
       String seriesLabel, String issueTitle) async {
     final uri = Uri.parse('$baseUrl/feeds/posts/default/-/'
@@ -160,11 +158,16 @@ class ComicService {
         '?alt=json&max-results=10&q=${Uri.encodeComponent(issueTitle)}');
     final data = await _fetchJson(uri);
     final entries = _parseEntries(data);
+    final labelLower = seriesLabel.toLowerCase();
     for (final p in entries) {
-      if (p.title == issueTitle) return p;
+      if (p.title != issueTitle) continue;
+      // تحقق إضافي: المنشور يجب أن يحمل تصنيف العمل المطلوب فعليًا،
+      // لتجنب قبول منشور "العدد#1" من عمل مختلف تمامًا.
+      final hasLabel = p.labels.any((l) => l.toLowerCase() == labelLower);
+      if (hasLabel) return p;
     }
-    // لا fallback لأي نتيجة أخرى هنا عمدًا: نتيجة من عمل/عدد مختلف أسوأ
-    // بكثير من عدم العثور على شيء (يظهر خطأ واضح بدل محتوى خاطئ مضلِّل).
+    // إن لم نجد تطابقاً مع تحقق التصنيف، نُرجع null ليقع الاستدعاء على
+    // الخطة البديلة (fetchByLabel الكاملة) في IssueReaderScreen.
     return null;
   }
 
