@@ -39,12 +39,31 @@ jobs:
       - name: Add internet permission to AndroidManifest
         run: |
           sed -i 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />#' android/app/src/main/AndroidManifest.xml
-          cat android/app/src/main/AndroidManifest.xml
+
+      # فك ترميز Keystore من Base64 وحفظه كملف مؤقت في بيئة الـ CI
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
+
+      # إنشاء ملف key.properties الذي يقرأه Gradle أثناء البناء للتوقيع
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=keystore.jks
+          EOF
+
+      # نستبدل build.gradle المُولَّد تلقائياً بملفنا الجاهز الذي يحوي
+      # إعدادات التوقيع — أبسط بكثير من تعديله ديناميكياً بسكربت.
+      - name: Use custom build.gradle (with signing config)
+        run: cp ci/app-build.gradle android/app/build.gradle
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build APK (release)
+      - name: Build APK (release signed)
         run: flutter build apk --release
 
       - name: Set release tag
@@ -59,5 +78,8 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Comicverse ${{ steps.tag.outputs.tag }}
-          body: بناء تلقائي من GitHub Actions - الكوميت ${{ github.sha }}
+          body: |
+            بناء تلقائي موقَّع من GitHub Actions
+            الكوميت: ${{ github.sha }}
           files: comicverse-${{ steps.tag.outputs.tag }}.apk
+
